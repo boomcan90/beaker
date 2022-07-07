@@ -1,14 +1,23 @@
+from re import I
 from typing import Final
 
 from pyteal import *
 from beaker import *
-from beaker.decorators import bare_handler
 
 
 @Subroutine(TealType.bytes)
 def make_tag_key(tag: abi.String):
     return Concat(Bytes("tag:"), tag.get())
 
+class AppCallbackRegistryItem():
+    pass
+class Registry():
+
+    def __init__(self):
+        pass
+
+    def __getitem__(self, idx: int):
+        pass
 
 class MySickApp(Application):
 
@@ -25,6 +34,10 @@ class MySickApp(Application):
     tags: Final[DynamicLocalStateValue] = DynamicLocalStateValue(
         TealType.uint64, max_keys=10, key_gen=make_tag_key
     )
+
+    registry_fee: Final[Int] = Int(2)*Algo
+
+    registry = Registry()
 
     # Overrides the default
     @bare_handler(no_op=CallConfig.CREATE)
@@ -63,6 +76,47 @@ class MySickApp(Application):
         """add a tag to a user"""
         return self.tags(tag).set(Txn.sender(), Int(1))
 
+    @handler
+    def register_callback(self, fee: abi.PaymentTransaction, round: abi.Uint64, app: abi.Application, method: abi.String, *, output: abi.Uint64):
+        return Seq(
+            Assert(round>Global.round+10),
+            Assert(fee.get().amount()>self.registry_fee),
+            output.set(self.registry.add(app, method, round))
+        )
+
+    @handler(authorize=Authorize.only(Global.creator_address))
+    def trigger_callback(self, index: abi.Uint64, app: abi.Application, method: abi.String, *, output: abi.String):
+        return Seq(
+            (data := abi.String()).set(self.generate_data()),
+            output.set(self.registry.trigger(index, app, method, Global.round, data))
+        )
+
+    @internal(TealType.bytes)
+    def generate_data(self):
+        return Bytes("Lmao.")
+
+    #...
+
+    oracle_id: Final[Int] = Int(256)
+    oracle_method: Final[str] = register_callback.method_signature() 
+
+    @handler
+    def handle_callback(data: abi.String, *, output: abi.String):
+        return output.set(Concat("lol.", data.get()))
+
+    @internal(TealType.uint64)
+    def register_with_oracle(self):
+        return Seq(
+            InnerTxnBuilder.Begin(),
+            InnerTxnBuilder.MethodCall(
+                app_id=self.oracle_id,
+                method_signature=self.oracle_method,
+                args=[
+                    self.handle_callback.method_signature()
+                ]
+            ),
+            InnerTxnBuilder.Submit()
+        )
 
 if __name__ == "__main__":
     import json

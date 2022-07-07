@@ -26,6 +26,7 @@ from .application_schema import (
     DynamicGlobalStateValue,
 )
 
+
 class Application:
     """Application should be subclassed to add functionality"""
 
