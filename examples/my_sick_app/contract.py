@@ -79,16 +79,16 @@ class MySickApp(Application):
     @handler
     def register_callback(self, fee: abi.PaymentTransaction, round: abi.Uint64, app: abi.Application, method: abi.String, *, output: abi.Uint64):
         return Seq(
-            Assert(round>Global.round+10),
+            Assert(round>Global.round()+10),
             Assert(fee.get().amount()>self.registry_fee),
             output.set(self.registry.add(app, method, round))
         )
 
     @handler(authorize=Authorize.only(Global.creator_address))
-    def trigger_callback(self, index: abi.Uint64, app: abi.Application, method: abi.String, *, output: abi.String):
+    def trigger_callback(self, index: abi.Uint64, method: abi.String, *, output: abi.String):
         return Seq(
             (data := abi.String()).set(self.generate_data()),
-            output.set(self.registry.trigger(index, app, method, Global.round, data))
+            output.set(self.registry.trigger(index, Global.caller_app_id(), method, Global.round(), data))
         )
 
     @internal(TealType.bytes)
